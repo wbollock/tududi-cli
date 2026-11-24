@@ -35,6 +35,8 @@ commands:
   edit <uid>         Change a task.
   rm <uid...>        Delete tasks.
   pick               Choose a task with fzf, then act on it.
+  plan               Show today's Plan-your-day list.
+  plan add <uid...>  Add tasks to today's plan without a time slot.
   version            Print the version.
 
 environment:
@@ -70,6 +72,7 @@ func run(args []string, out io.Writer) error {
 		"edit": cmdEdit,
 		"rm":   cmdRemove,
 		"pick": cmdPick,
+		"plan": cmdPlan,
 	}
 	fn, ok := commands[cmd]
 	if !ok {
@@ -490,6 +493,60 @@ func cmdEdit(c *Client, args []string, out io.Writer) error {
 	}
 	fmt.Fprintf(out, "updated %s\n", uids[0])
 	return nil
+}
+
+func cmdPlan(c *Client, args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
+	date := fs.String("date", "today", "day of the plan: today or YYYY-MM-DD")
+	asJSON := fs.Bool("json", false, "print tududi's response as JSON")
+	rest, err := parseArgs(fs, args)
+	if err != nil {
+		return err
+	}
+	if *date != "today" && !isoDate.MatchString(*date) {
+		return errors.New("--date must be today or YYYY-MM-DD")
+	}
+
+	var raw json.RawMessage
+	adding := len(rest) > 0 && rest[0] == "add"
+	switch {
+	case adding:
+		if len(rest) < 2 {
+			return errors.New("usage: tududi-cli plan add <uid...>")
+		}
+		raw, err = c.AddToPlan(*date, rest[1:])
+	case len(rest) == 0:
+		raw, err = c.GetPlan(*date)
+	default:
+		return errors.New("usage: tududi-cli plan [add <uid...>]")
+	}
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(out, raw)
+	}
+
+	var p DayPlan
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return err
+	}
+	if adding {
+		fmt.Fprintf(out, "planned %d tasks for %s\n", len(rest)-1, p.Date)
+		return nil
+	}
+	if p.Plan == nil {
+		return nil
+	}
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	for _, item := range p.Plan.Items {
+		start := "-"
+		if item.StartMinute != nil {
+			start = fmt.Sprintf("%02d:%02d", *item.StartMinute/60, *item.StartMinute%60)
+		}
+		fmt.Fprintf(w, "%s\t%dm\t%s\t%s\n", start, item.DurationMinutes, item.TaskUID, shorten(item.Task.DisplayName(), maxNameWidth))
+	}
+	return w.Flush()
 }
 
 func cmdPick(c *Client, args []string, out io.Writer) error {

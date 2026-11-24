@@ -45,6 +45,8 @@ func server(t *testing.T, analysis string) (*Client, *[]request) {
 			io.WriteString(w, `{"tasks":[{"uid":"task1","name":"Daily","original_name":"water plants","due_date":"2026-11-27T00:00:00.000Z","Project":{"name":"Infra"},"tags":[{"name":"m"}]}]}`)
 		case "/api/v1/task/task1":
 			io.WriteString(w, `{"uid":"task1"}`)
+		case "/api/v1/daily-plan", "/api/v1/daily-plan/today/carry-over":
+			io.WriteString(w, `{"date":"2026-11-24","plan":{"items":[{"task_uid":"task1","start_minute":570,"duration_minutes":45,"task":{"name":"Daily","original_name":"water plants"}},{"task_uid":"task2","start_minute":null,"duration_minutes":30,"task":{"name":"write doc"}}]}}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			io.WriteString(w, `{"error":"Not found"}`)
@@ -129,6 +131,53 @@ func TestEditRejectsUnknownPriority(t *testing.T) {
 	c, got := server(t, "")
 	err := cmdEdit(c, []string{"task1", "--priority", "urgent"}, io.Discard)
 	if err == nil || err.Error() != "priority must be one of low, medium, high" {
+		t.Fatalf("err = %v", err)
+	}
+	if len(*got) != 0 {
+		t.Fatal("request was sent")
+	}
+}
+
+func TestPlanListsTodaysPlan(t *testing.T) {
+	c, got := server(t, "")
+	var out bytes.Buffer
+	if err := cmdPlan(c, nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	if r := (*got)[0]; r.Method != http.MethodGet || r.Path != "/api/v1/daily-plan" || r.Query != "date=today" {
+		t.Errorf("request %s %s?%s", r.Method, r.Path, r.Query)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	want := []string{"09:30 45m task1 water plants", "- 30m task2 write doc"}
+	for i, line := range lines {
+		if strings.Join(strings.Fields(line), " ") != want[i] {
+			t.Errorf("line %d = %q, want %q", i, line, want[i])
+		}
+	}
+}
+
+func TestPlanAddCarriesTasksOverToToday(t *testing.T) {
+	c, got := server(t, "")
+	var out bytes.Buffer
+	if err := cmdPlan(c, []string{"add", "task1", "task2"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	r := (*got)[0]
+	if r.Method != http.MethodPost || r.Path != "/api/v1/daily-plan/today/carry-over" {
+		t.Fatalf("request %s %s", r.Method, r.Path)
+	}
+	if b, _ := json.Marshal(r.Body); string(b) != `{"task_uids":["task1","task2"]}` {
+		t.Errorf("body %s", b)
+	}
+	if out.String() != "planned 2 tasks for 2026-11-24\n" {
+		t.Errorf("output %q", out.String())
+	}
+}
+
+func TestPlanRejectsBadDate(t *testing.T) {
+	c, got := server(t, "")
+	err := cmdPlan(c, []string{"--date", "fri"}, io.Discard)
+	if err == nil || err.Error() != "--date must be today or YYYY-MM-DD" {
 		t.Fatalf("err = %v", err)
 	}
 	if len(*got) != 0 {

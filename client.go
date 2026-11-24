@@ -189,6 +189,39 @@ func (c *Client) DeleteTask(uid string) error {
 	return c.do(http.MethodDelete, "/task/"+url.PathEscape(uid), nil, nil, nil)
 }
 
+// PlanItem is one task on a day's plan. StartMinute is minutes after
+// midnight, or nil when the task has no time slot yet.
+type PlanItem struct {
+	TaskUID         string `json:"task_uid"`
+	StartMinute     *int   `json:"start_minute"`
+	DurationMinutes int    `json:"duration_minutes"`
+	Task            Task   `json:"task"`
+}
+
+// DayPlan is the Plan-your-day list for one date. Plan is nil before
+// anything is planned for the day.
+type DayPlan struct {
+	Date string `json:"date"`
+	Plan *struct {
+		Items []PlanItem `json:"items"`
+	} `json:"plan"`
+}
+
+// GetPlan returns the plan for date, which is "today" or YYYY-MM-DD.
+func (c *Client) GetPlan(date string) (json.RawMessage, error) {
+	var raw json.RawMessage
+	err := c.do(http.MethodGet, "/daily-plan", url.Values{"date": {date}}, nil, &raw)
+	return raw, err
+}
+
+// AddToPlan appends tasks to a day's plan without a time slot. Tasks that
+// are already on the plan stay where they are.
+func (c *Client) AddToPlan(date string, uids []string) (json.RawMessage, error) {
+	var raw json.RawMessage
+	err := c.do(http.MethodPost, "/daily-plan/"+url.PathEscape(date)+"/carry-over", nil, map[string]any{"task_uids": uids}, &raw)
+	return raw, err
+}
+
 func (c *Client) Projects() ([]Project, error) {
 	var resp struct {
 		Projects []Project `json:"projects"`
