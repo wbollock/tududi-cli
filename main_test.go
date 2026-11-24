@@ -105,6 +105,15 @@ func TestListQueryAndOutput(t *testing.T) {
 	}
 }
 
+func TestTaskLineShortensLongNames(t *testing.T) {
+	name := strings.Repeat("é", 70)
+	line := taskLine(Task{UID: "u", OriginalName: name})
+	want := "u\t-\t" + strings.Repeat("é", 59) + "…\t"
+	if line != want {
+		t.Errorf("line\n got %q\nwant %q", line, want)
+	}
+}
+
 func TestEditSendsOnlyChangedFields(t *testing.T) {
 	c, got := server(t, "")
 	if err := cmdEdit(c, []string{"task1", "--due", "none", "--priority", "high", "--tags", "a, b,"}, io.Discard); err != nil {

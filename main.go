@@ -246,7 +246,7 @@ func (f *listFlags) tasks(c *Client) (json.RawMessage, []Task, error) {
 
 // taskLine is one task on one line: uid, due date, name, +project, #tags.
 func taskLine(t Task) string {
-	parts := []string{t.UID, dashIfEmpty(dateOnly(t.DueDate)), t.DisplayName()}
+	parts := []string{t.UID, dashIfEmpty(dateOnly(t.DueDate)), shorten(t.DisplayName(), maxNameWidth)}
 	var extra []string
 	if t.Project != nil {
 		extra = append(extra, "+"+t.Project.Name)
@@ -256,6 +256,17 @@ func taskLine(t Task) string {
 	}
 	parts = append(parts, strings.Join(extra, " "))
 	return strings.Join(parts, "\t")
+}
+
+// maxNameWidth keeps one long task name from widening every row of a list.
+const maxNameWidth = 60
+
+func shorten(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 func dashIfEmpty(s string) string {
