@@ -1,3 +1,5 @@
+AI-generated content prepared on Will's behalf.
+
 # tududi-cli
 
 A command-line client for [tududi](https://github.com/chrisvel/tududi) tasks. It uses the tududi REST API with an API key.
