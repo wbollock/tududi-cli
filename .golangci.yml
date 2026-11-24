@@ -1,0 +1,10 @@
+version: "2"
+linters:
+  settings:
+    errcheck:
+      # Output goes to a terminal or test buffer; a failed write has no recovery.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - io.WriteString
